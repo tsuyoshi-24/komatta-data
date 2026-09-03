@@ -231,6 +231,12 @@ def convert_medical(kind, rows):
             "ID"
         ]
     )
+    pref_code_col = find_column(
+    headers,
+    [
+        "都道府県コード"
+    ]
+)
 
     name_col = find_column(
         headers,
@@ -308,10 +314,12 @@ def convert_medical(kind, rows):
         )
 
         result.append(
-            {
-                "id": f"{kind}:{record_id}",
-                "type": kind,
-                "name": name,
+    {
+        "id": f"{kind}:{record_id}",
+        "facilityId": row_value(row, id_col),
+        "prefectureCode": row_value(row, pref_code_col),
+        "type": kind,
+        "name": name,
                 "prefecture": row_value(row, pref_col),
                 "municipality": row_value(row, city_col),
                 "address": address,
