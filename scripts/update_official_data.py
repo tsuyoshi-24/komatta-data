@@ -219,6 +219,7 @@ def convert_medical(kind, rows):
         )
 
     headers = list(rows[0].keys())
+    print(f"{kind} headers: {headers}")
 
     id_col = find_column(
         headers,
