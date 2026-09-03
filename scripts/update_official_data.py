@@ -49,21 +49,13 @@ PREFS = [
 
 
 def fetch(url: str) -> requests.Response:
-    response = requests.get(
-        url,
-        headers=UA,
-        timeout=60
-    )
-    response.raise_for_status()
-    return response
+    r = requests.get(url, headers=UA, timeout=60)
+    r.raise_for_status()
+    return r
 
 
 def clean(value: str | None) -> str:
-    return re.sub(
-        r"\s+",
-        " ",
-        value or ""
-    ).strip()
+    return re.sub(r"\s+", " ", value or "").strip()
 
 
 def prefecture_short(prefecture: str) -> str:
@@ -73,20 +65,13 @@ def prefecture_short(prefecture: str) -> str:
     return prefecture
 
 
-# --------------------------------------------------
-# 医療情報
-# --------------------------------------------------
+# ==================================================
+# 医療データ
+# ==================================================
 
 def latest_medical_links():
-    soup = BeautifulSoup(
-        fetch(MEDICAL_PAGE).text,
-        "html.parser"
-    )
-
-    text = soup.get_text(
-        " ",
-        strip=True
-    )
+    soup = BeautifulSoup(fetch(MEDICAL_PAGE).text, "html.parser")
+    text = soup.get_text(" ", strip=True)
 
     m = re.search(
         r"(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日時点",
@@ -102,11 +87,7 @@ def latest_medical_links():
     found = {}
 
     for a in soup.find_all("a", href=True):
-        href = urljoin(
-            MEDICAL_PAGE,
-            a["href"]
-        )
-
+        href = urljoin(MEDICAL_PAGE, a["href"])
         filename = href.split("/")[-1].lower()
 
         if re.search(
@@ -138,35 +119,18 @@ def latest_medical_links():
             f"医療データURL取得失敗: {found}"
         )
 
-    # ページ上で日付を取得できない場合は
-    # ZIPファイル名の日付を利用
     if date is None:
         first_url = next(iter(found.values()))
-
-        fm = re.search(
-            r"_(20\d{6})\.csv\.zip$",
-            first_url
-        )
+        fm = re.search(r"_(20\d{6})\.csv\.zip$", first_url)
 
         if fm:
             d = fm.group(1)
+            date = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
 
-            date = (
-                f"{d[0:4]}-"
-                f"{d[4:6]}-"
-                f"{d[6:8]}"
-            )
-
-    print(
-        "Medical source:",
-        date
-    )
+    print("Medical source:", date)
 
     for kind, url in found.items():
-        print(
-            kind,
-            url
-        )
+        print(kind, url)
 
     return date, found
 
@@ -175,30 +139,23 @@ def csv_rows(url: str):
     raw = fetch(url).content
 
     if raw[:2] == b"PK":
-        with zipfile.ZipFile(
-            io.BytesIO(raw)
-        ) as z:
-
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
             names = [
-                name
-                for name in z.namelist()
-                if name.lower().endswith(".csv")
+                n
+                for n in z.namelist()
+                if n.lower().endswith(".csv")
             ]
 
             if not names:
                 raise RuntimeError(
-                    f"ZIP内にCSVなし: {url}"
+                    f"ZIP内にCSVがありません: {url}"
                 )
 
             raw = z.read(names[0])
 
     text = None
 
-    for enc in (
-        "utf-8-sig",
-        "cp932",
-        "utf-8"
-    ):
+    for enc in ("utf-8-sig", "cp932", "utf-8"):
         try:
             text = raw.decode(enc)
             break
@@ -206,10 +163,7 @@ def csv_rows(url: str):
             pass
 
     if text is None:
-        text = raw.decode(
-            "utf-8",
-            errors="replace"
-        )
+        text = raw.decode("utf-8", errors="replace")
 
     return list(
         csv.DictReader(
@@ -226,10 +180,7 @@ def norm(value: str | None) -> str:
     ).lower()
 
 
-def find_column(
-    headers,
-    candidates
-):
+def find_column(headers, candidates):
     for candidate in candidates:
         for header in headers:
             if norm(header) == norm(candidate):
@@ -243,46 +194,31 @@ def find_column(
     return None
 
 
-def value(
-    row,
-    column
-):
+def row_value(row, column):
     if not column:
         return ""
 
     return clean(
-        row.get(
-            column,
-            ""
-        )
+        row.get(column, "")
     )
 
 
-def number(value_string):
+def to_number(value):
     try:
-        if not value_string:
+        if not value:
             return None
-
-        return float(
-            value_string
-        )
-
+        return float(value)
     except (ValueError, TypeError):
         return None
 
 
-def convert_medical(
-    kind,
-    rows
-):
+def convert_medical(kind, rows):
     if not rows:
         raise RuntimeError(
             f"{kind}: CSVが空です"
         )
 
-    headers = list(
-        rows[0].keys()
-    )
+    headers = list(rows[0].keys())
 
     id_col = find_column(
         headers,
@@ -342,22 +278,10 @@ def convert_medical(
         ]
     )
 
-    lat_col = find_column(
-        headers,
-        ["緯度"]
-    )
-
-    lon_col = find_column(
-        headers,
-        ["経度"]
-    )
+    lat_col = find_column(headers, ["緯度"])
+    lon_col = find_column(headers, ["経度"])
 
     if not name_col:
-        print(
-            "Headers:",
-            headers
-        )
-
         raise RuntimeError(
             f"{kind}: 名称列を特定できません"
         )
@@ -365,24 +289,15 @@ def convert_medical(
     result = []
 
     for index, row in enumerate(rows):
-        name = value(
-            row,
-            name_col
-        )
+        name = row_value(row, name_col)
 
         if not name:
             continue
 
-        address = value(
-            row,
-            address_col
-        )
+        address = row_value(row, address_col)
 
         record_id = (
-            value(
-                row,
-                id_col
-            )
+            row_value(row, id_col)
             or
             f"{index}-{name}-{address}"
         )
@@ -392,81 +307,52 @@ def convert_medical(
                 "id": f"{kind}:{record_id}",
                 "type": kind,
                 "name": name,
-                "prefecture": value(
-                    row,
-                    pref_col
-                ),
-                "municipality": value(
-                    row,
-                    city_col
-                ),
+                "prefecture": row_value(row, pref_col),
+                "municipality": row_value(row, city_col),
                 "address": address,
                 "phone": (
-                    value(
-                        row,
-                        phone_col
-                    )
+                    row_value(row, phone_col)
                     or None
                 ),
-                "latitude": number(
-                    value(
-                        row,
-                        lat_col
-                    )
+                "latitude": to_number(
+                    row_value(row, lat_col)
                 ),
-                "longitude": number(
-                    value(
-                        row,
-                        lon_col
-                    )
+                "longitude": to_number(
+                    row_value(row, lon_col)
                 )
             }
         )
 
-    print(
-        f"{kind}: {len(result)}件"
-    )
+    print(f"{kind}: {len(result)}件")
 
     return result
 
 
 def update_medical():
-    source_date, links = (
-        latest_medical_links()
-    )
+    source_date, links = latest_medical_links()
 
     all_records = []
 
     for kind, url in links.items():
-        print(
-            f"Downloading {kind}"
-        )
+        print(f"Downloading {kind}")
 
         rows = csv_rows(url)
+        converted = convert_medical(kind, rows)
 
-        converted = convert_medical(
-            kind,
-            rows
-        )
-
-        all_records.extend(
-            converted
-        )
+        all_records.extend(converted)
 
     unique = {
-        record["id"]: record
-        for record in all_records
+        r["id"]: r
+        for r in all_records
     }
 
-    data = list(
-        unique.values()
-    )
+    data = list(unique.values())
 
     data.sort(
-        key=lambda record: (
-            record["prefecture"],
-            record["municipality"],
-            record["name"]
+        key=lambda r: (
+            r["prefecture"],
+            r["municipality"],
+            r["name"]
         )
     )
 
@@ -475,12 +361,9 @@ def update_medical():
             "医療データが0件のため保存を中止"
         )
 
-    output_file = (
-        OUT /
-        "medical_facilities.json"
-    )
+    output = OUT / "medical_facilities.json"
 
-    output_file.write_text(
+    output.write_text(
         json.dumps(
             data,
             ensure_ascii=False,
@@ -489,19 +372,14 @@ def update_medical():
         encoding="utf-8"
     )
 
-    print(
-        f"Medical total: {len(data)}"
-    )
+    print(f"Medical total: {len(data)}")
 
-    return (
-        source_date,
-        len(data)
-    )
+    return source_date, len(data)
 
 
-# --------------------------------------------------
+# ==================================================
 # #7119
-# --------------------------------------------------
+# ==================================================
 
 def extract_7119():
     soup = BeautifulSoup(
@@ -512,20 +390,11 @@ def extract_7119():
     result = []
 
     for table in soup.find_all("table"):
-        table_text = clean(
-            table.get_text(
-                " ",
-                strip=True
-            )
+        text = clean(
+            table.get_text(" ", strip=True)
         )
 
-        if (
-            "利用地域" not in table_text
-            and
-            "#7119" not in table_text
-            and
-            "♯7119" not in table_text
-        ):
+        if "7119" not in text:
             continue
 
         rows = table.find_all("tr")
@@ -533,120 +402,64 @@ def extract_7119():
         for index, tr in enumerate(rows):
             cells = [
                 clean(
-                    x.get_text(
-                        " ",
-                        strip=True
-                    )
+                    x.get_text(" ", strip=True)
                 )
-                for x in tr.find_all(
-                    ["th", "td"]
-                )
+                for x in tr.find_all(["th", "td"])
             ]
 
-            if len(cells) < 4:
+            if not cells:
                 continue
 
             joined = " | ".join(cells)
 
-            if (
-                "7119" not in joined
-                and
-                index == 0
-            ):
+            if "7119" not in joined:
                 continue
-
-            center = (
-                cells[0]
-                if len(cells) > 0
-                else ""
-            )
-
-            area = (
-                cells[1]
-                if len(cells) > 1
-                else ""
-            )
-
-            target = (
-                cells[2]
-                if len(cells) > 2
-                else ""
-            )
-
-            phone_text = joined
-
-            hours = (
-                cells[-1]
-                if cells
-                else ""
-            )
 
             pref = None
 
             for p in PREFS:
                 short = prefecture_short(p)
 
-                if (
-                    p in joined
-                    or
-                    short in area
-                ):
+                if p in joined or short in joined:
                     pref = p
                     break
 
             phone_numbers = re.findall(
                 r"0\d{1,4}-\d{1,4}-\d{3,4}",
-                phone_text
+                joined
             )
 
             result.append(
                 {
-                    "id": (
-                        f"7119-"
-                        f"{index}-"
-                        f"{center}"
-                    ),
+                    "id": f"7119-{index}-{joined[:20]}",
                     "prefecture": pref,
-                    "area": area,
-                    "title": (
-                        center
-                        or
-                        "救急安心センター"
-                    ),
-                    "shortNumber": (
-                        "#7119"
-                        if "7119" in joined
-                        else None
-                    ),
+                    "area": joined,
+                    "title": "救急安心センター",
+                    "shortNumber": "#7119",
                     "normalNumber": (
                         phone_numbers[0]
                         if phone_numbers
                         else None
                     ),
-                    "hours": hours,
-                    "target": target,
+                    "hours": "公式情報をご確認ください",
+                    "target": "救急車を呼ぶか迷うとき",
                     "sourceURL": FDMA_7119
                 }
             )
-
-        if result:
-            break
 
     if not result:
         raise RuntimeError(
             "#7119取得失敗"
         )
 
-    print(
-        f"#7119: {len(result)}件"
-    )
+    print(f"#7119: {len(result)}件")
 
     return result
 
 
-# --------------------------------------------------
+# ==================================================
 # #8000
-# --------------------------------------------------
+# ==================================================
 
 def extract_8000():
     soup = BeautifulSoup(
@@ -657,49 +470,32 @@ def extract_8000():
     result = []
 
     for table in soup.find_all("table"):
-        table_text = clean(
-            table.get_text(
-                " ",
-                strip=True
-            )
+        text = clean(
+            table.get_text(" ", strip=True)
         )
 
-        if "8000" not in table_text:
+        if "8000" not in text:
             continue
 
         for tr in table.find_all("tr"):
             cells = [
                 clean(
-                    x.get_text(
-                        " ",
-                        strip=True
-                    )
+                    x.get_text(" ", strip=True)
                 )
-                for x in tr.find_all(
-                    ["th", "td"]
-                )
+                for x in tr.find_all(["th", "td"])
             ]
 
             if not cells:
                 continue
 
-            joined = (
-                " | ".join(cells)
-            )
+            joined = " | ".join(cells)
 
             pref = None
 
             for p in PREFS:
                 short = prefecture_short(p)
 
-                if (
-                    p in joined
-                    or
-                    re.search(
-                        rf"(^|\s|\|){re.escape(short)}($|\s|\|)",
-                        joined
-                    )
-                ):
+                if p in joined or short in joined:
                     pref = p
                     break
 
@@ -709,22 +505,6 @@ def extract_8000():
             phone_numbers = re.findall(
                 r"0\d{1,4}-\d{1,4}-\d{3,4}",
                 joined
-            )
-
-            times = re.findall(
-                r"\d{1,2}:\d{2}[^|]{0,30}",
-                joined
-            )
-
-            hours = (
-                " / ".join(
-                    dict.fromkeys(
-                        x.strip()
-                        for x in times
-                    )
-                )
-                or
-                "受付時間は公式情報をご確認ください"
             )
 
             result.append(
@@ -739,60 +519,96 @@ def extract_8000():
                         if phone_numbers
                         else None
                     ),
-                    "hours": hours,
-                    "target": (
-                        "子どもの症状で"
-                        "判断に迷うとき"
-                    ),
+                    "hours": "受付時間は公式情報をご確認ください",
+                    "target": "子どもの症状で判断に迷うとき",
                     "sourceURL": MHLW_8000
                 }
             )
 
-        if len(result) >= 40:
-            break
-
-    # 同一都道府県を重複排除
     unique = {}
 
     for item in result:
         unique[item["prefecture"]] = item
 
-    result = list(
-        unique.values()
-    )
+    result = list(unique.values())
 
     if len(result) < 40:
         raise RuntimeError(
             f"#8000取得不足: {len(result)}件"
         )
 
-    print(
-        f"#8000: {len(result)}件"
-    )
+    print(f"#8000: {len(result)}件")
 
     return result
 
 
-# --------------------------------------------------
-# メイン処理
-# --------------------------------------------------
+# ==================================================
+# メイン
+# ==================================================
 
 def main():
     now = datetime.now(
         timezone.utc
     ).isoformat()
 
-    medical_date, medical_count = (
-        update_medical()
-    )
+    medical_date, medical_count = update_medical()
 
-    hotline_7119 = (
-        extract_7119()
-    )
+    emergency_file = OUT / "emergency_contacts.json"
 
-    hotline_8000 = (
-        extract_8000()
-    )
+    old_7119 = []
+    old_8000 = []
+
+    if emergency_file.exists():
+        try:
+            old_data = json.loads(
+                emergency_file.read_text(
+                    encoding="utf-8"
+                )
+            )
+
+            old_7119 = old_data.get(
+                "hotline7119",
+                []
+            )
+
+            old_8000 = old_data.get(
+                "hotline8000",
+                []
+            )
+
+        except Exception as e:
+            print(
+                "WARNING: 前回救急データの読み込み失敗",
+                e
+            )
+
+    try:
+        hotline_7119 = extract_7119()
+
+    except Exception as e:
+        print(
+            f"WARNING #7119更新失敗: {e}"
+        )
+
+        print(
+            "前回の#7119データを維持します"
+        )
+
+        hotline_7119 = old_7119
+
+    try:
+        hotline_8000 = extract_8000()
+
+    except Exception as e:
+        print(
+            f"WARNING #8000更新失敗: {e}"
+        )
+
+        print(
+            "前回の#8000データを維持します"
+        )
+
+        hotline_8000 = old_8000
 
     emergency = {
         "generatedAt": now,
@@ -800,10 +616,7 @@ def main():
         "hotline8000": hotline_8000
     }
 
-    (
-        OUT /
-        "emergency_contacts.json"
-    ).write_text(
+    emergency_file.write_text(
         json.dumps(
             emergency,
             ensure_ascii=False,
@@ -835,15 +648,9 @@ def main():
 
     print("")
     print("===== UPDATE COMPLETE =====")
-    print(
-        f"Medical: {medical_count}"
-    )
-    print(
-        f"#7119: {len(hotline_7119)}"
-    )
-    print(
-        f"#8000: {len(hotline_8000)}"
-    )
+    print(f"Medical: {medical_count}")
+    print(f"#7119: {len(hotline_7119)}")
+    print(f"#8000: {len(hotline_8000)}")
     print("===========================")
 
 
