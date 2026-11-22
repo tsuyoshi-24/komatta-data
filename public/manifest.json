@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-16T10:09:31.659335+00:00",
+  "generatedAt": "2026-11-22T23:36:46.578314+00:00",
   "medicalSourceDate": "2026-06-01",
-  "emergencySourceDate": "2026-11-16",
+  "emergencySourceDate": "2026-11-22",
   "medicalFile": "medical_facilities.json",
   "emergencyFile": "emergency_contacts.json"
 }
